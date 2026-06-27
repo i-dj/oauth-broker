@@ -18,10 +18,11 @@ func New(oauthHandler *handler.OAuthHandler, authHandler *handler.AuthHandler, j
 	r.Use(requestLogger(), gin.Recovery(), securityHeaders())
 
 	r.GET("/healthz", healthz)
+	r.GET("/version", version)
 
 	api := r.Group("/api")
 	{
-		api.POST("/devices/register", authHandler.RegisterDevice)
+		api.PUT("/devices/:device_id", authHandler.RegisterDevice)
 		api.POST("/auth/token", authHandler.IssueToken)
 		api.POST("/auth/refresh", requireJWT(jwt), authHandler.RefreshJWT)
 		api.POST("/rclone/:provider/token", authHandler.RcloneToken)
@@ -34,7 +35,7 @@ func New(oauthHandler *handler.OAuthHandler, authHandler *handler.AuthHandler, j
 
 		protected := oauth.Group("")
 		protected.Use(requireJWT(jwt))
-		protected.POST("/session", oauthHandler.CreateSession)
+		protected.POST("/:provider/session", oauthHandler.CreateSession)
 		protected.GET("/status/:session_id", oauthHandler.GetStatus)
 		protected.POST("/exchange", oauthHandler.Exchange)
 		protected.DELETE("/session/:session_id", oauthHandler.CancelSession)
@@ -43,9 +44,12 @@ func New(oauthHandler *handler.OAuthHandler, authHandler *handler.AuthHandler, j
 }
 
 func healthz(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func version(c *gin.Context) {
 	info := buildinfo.Current()
 	c.JSON(http.StatusOK, gin.H{
-		"status":     "ok",
 		"version":    info.Version,
 		"commit":     info.Commit,
 		"build_date": info.Date,

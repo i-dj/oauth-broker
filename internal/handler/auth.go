@@ -29,7 +29,6 @@ func NewAuthHandler(appStore store.Store, jwt *auth.JWTService, providers *provi
 }
 
 type registerDeviceRequest struct {
-	DeviceID     string `json:"device_id" binding:"required"`
 	Name         string `json:"name"`
 	PublicKeyPEM string `json:"public_key_pem" binding:"required"`
 }
@@ -39,28 +38,28 @@ func (h *AuthHandler) RegisterDevice(c *gin.Context) {
 		writeError(c, http.StatusUnauthorized, "invalid_registration_secret", "invalid registration secret")
 		return
 	}
-	var req registerDeviceRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_request", "device_id and public_key_pem are required")
-		return
-	}
-	req.DeviceID = strings.TrimSpace(req.DeviceID)
-	req.Name = strings.TrimSpace(req.Name)
-	req.PublicKeyPEM = strings.TrimSpace(req.PublicKeyPEM)
-	if !deviceIDPattern.MatchString(req.DeviceID) {
+	deviceID := strings.TrimSpace(c.Param("device_id"))
+	if !deviceIDPattern.MatchString(deviceID) {
 		writeError(c, http.StatusBadRequest, "invalid_device_id", "device_id format is invalid")
 		return
 	}
+	var req registerDeviceRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		writeError(c, http.StatusBadRequest, "invalid_request", "public_key_pem is required")
+		return
+	}
+	req.Name = strings.TrimSpace(req.Name)
+	req.PublicKeyPEM = strings.TrimSpace(req.PublicKeyPEM)
 	if err := auth.ValidatePublicKey(req.PublicKeyPEM); err != nil {
 		writeError(c, http.StatusBadRequest, "invalid_public_key", "public_key_pem is invalid or unsupported")
 		return
 	}
-	device := &model.Device{ID: req.DeviceID, Name: req.Name, PublicKeyPEM: req.PublicKeyPEM}
+	device := &model.Device{ID: deviceID, Name: req.Name, PublicKeyPEM: req.PublicKeyPEM}
 	if err := h.store.RegisterDevice(c.Request.Context(), device); err != nil {
 		writeError(c, http.StatusInternalServerError, "device_register_failed", "could not register device")
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"device_id": req.DeviceID, "status": "registered"})
+	c.JSON(http.StatusCreated, gin.H{"device_id": deviceID, "status": "registered"})
 }
 
 func (h *AuthHandler) IssueToken(c *gin.Context) {
@@ -137,6 +136,7 @@ func (h *AuthHandler) RcloneToken(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, publicRcloneToken(newToken, brokerRefreshToken))
 }
+
 func (h *AuthHandler) issueJWT(c *gin.Context, deviceID string) {
 	token, expiresAt, err := h.jwt.Issue(deviceID)
 	if err != nil {

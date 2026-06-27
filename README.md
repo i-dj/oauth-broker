@@ -6,13 +6,14 @@ The broker owns the provider OAuth credentials. NAS clients do not need to store
 
 ## Features
 
-- Dynamic provider routes: `/api/oauth/:provider/start` and `/api/oauth/:provider/callback`
+- Dynamic provider routes: `/api/oauth/:provider/session`, `/api/oauth/:provider/start`, and `/api/oauth/:provider/callback`
 - Google Drive, OneDrive, and Dropbox provider implementations
-- Device registration with NAS public keys
+- REST-style device registration with NAS public keys
 - Signed device authentication before issuing broker JWTs
 - PostgreSQL-backed sessions, device records, provider tokens, and broker refresh tokens
 - rclone-compatible refresh endpoint
-- `/healthz` endpoint with deployed version, build metadata, hostname, and server IPs
+- Minimal `/healthz` endpoint for probes
+- `/version` endpoint for deployed version, build metadata, hostname, and server IPs
 - GitHub Actions release deployment with tag-based version injection
 
 ## Configuration
@@ -59,11 +60,12 @@ Authorization: Bearer <broker_jwt>
 
 | Method | Path | Auth | Purpose | Example request | Example response |
 | --- | --- | --- | --- | --- | --- |
-| `GET` | `/healthz` | No | Health check and deployment metadata. | `GET /healthz` | `{"status":"ok","version":"v1.2.3","commit":"abc123","build_date":"2026-06-28T12:00:00Z","hostname":"srv-1","server_ips":["10.0.0.5"]}` |
-| `POST` | `/api/devices/register` | Optional registration secret | Register or update a NAS device public key. | `{"device_id":"nas-001","name":"Office NAS","public_key_pem":"-----BEGIN PUBLIC KEY-----\n..."}` | `{"device_id":"nas-001","status":"registered"}` |
+| `GET` | `/healthz` | No | Lightweight health probe. | `GET /healthz` | `{"status":"ok"}` |
+| `GET` | `/version` | No | Deployment metadata. | `GET /version` | `{"version":"v1.2.3","commit":"abc123","build_date":"2026-06-28T12:00:00Z","hostname":"srv-1","server_ips":["10.0.0.5"]}` |
+| `PUT` | `/api/devices/:device_id` | Optional registration secret | Register or update a NAS device public key. | `{"name":"Office NAS","public_key_pem":"-----BEGIN PUBLIC KEY-----\n..."}` | `{"device_id":"nas-001","status":"registered"}` |
 | `POST` | `/api/auth/token` | No | Verify a signed NAS request and issue a broker JWT. | `{"device_id":"nas-001","timestamp":1780000000,"nonce":"random","signature":"base64-signature"}` | `{"access_token":"jwt","token_type":"Bearer","expires_in":900,"expires_at":"2026-06-28T12:15:00Z"}` |
 | `POST` | `/api/auth/refresh` | Broker JWT | Refresh the broker JWT for the authenticated device. | `{}` | `{"access_token":"jwt","token_type":"Bearer","expires_in":900,"expires_at":"2026-06-28T12:15:00Z"}` |
-| `POST` | `/api/oauth/session` | Broker JWT | Create an OAuth authorization session. | `{"provider":"google"}` | `{"session_id":"sess_xxx","provider":"google","status":"pending","authorize_url":"https://oauth.example.com/api/oauth/google/start?session_id=sess_xxx","expires_at":"2026-06-28T12:10:00Z"}` |
+| `POST` | `/api/oauth/:provider/session` | Broker JWT | Create an OAuth authorization session for a provider. | `POST /api/oauth/google/session` | `{"session_id":"sess_xxx","provider":"google","status":"pending","authorize_url":"https://oauth.example.com/api/oauth/google/start?session_id=sess_xxx","expires_at":"2026-06-28T12:10:00Z"}` |
 | `GET` | `/api/oauth/:provider/start` | No | Redirect the browser to the provider authorization page. | `GET /api/oauth/google/start?session_id=sess_xxx` | `302 Location: https://accounts.google.com/...` |
 | `GET` | `/api/oauth/:provider/callback` | Provider callback | Receive provider OAuth callback and store provider tokens. | `GET /api/oauth/google/callback?code=...&state=...` | HTML success or failure page. |
 | `GET` | `/api/oauth/status/:session_id` | Broker JWT | Poll authorization status. | `GET /api/oauth/status/sess_xxx` | `{"session_id":"sess_xxx","provider":"google","status":"success","expires_at":"2026-06-28T12:10:00Z"}` |
@@ -92,9 +94,9 @@ Supported provider path names:
 ## Standard authorization flow
 
 ```text
-NAS -> POST /api/devices/register
+NAS -> PUT /api/devices/:device_id
 NAS -> POST /api/auth/token
-NAS -> POST /api/oauth/session
+NAS -> POST /api/oauth/:provider/session
 Browser -> GET /api/oauth/:provider/start?session_id=...
 Provider -> GET /api/oauth/:provider/callback
 NAS -> GET /api/oauth/status/:session_id
@@ -177,7 +179,7 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-The workflow builds a Linux arm64 binary and injects the tag into `/healthz` as the deployed version.
+The workflow builds a Linux arm64 binary and injects the tag into `/version` as the deployed version.
 
 Required GitHub Actions secrets:
 

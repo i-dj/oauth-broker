@@ -31,22 +31,14 @@ func NewOAuthHandler(sessionStore store.Store, providers *provider.Registry, pub
 	}
 }
 
-type createSessionRequest struct {
-	Provider string `json:"provider" binding:"required"`
-}
-
 type exchangeRequest struct {
 	SessionID string `json:"session_id" binding:"required"`
 }
 
 func (h *OAuthHandler) CreateSession(c *gin.Context) {
 	deviceID := MustDeviceID(c)
-	var req createSessionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		writeError(c, http.StatusBadRequest, "invalid_request", "provider is required")
-		return
-	}
-	p, ok := h.providers.Get(req.Provider)
+	providerName := strings.TrimSpace(c.Param("provider"))
+	p, ok := h.providers.Get(providerName)
 	if !ok {
 		writeError(c, http.StatusNotFound, "provider_not_found", "provider not found")
 		return
