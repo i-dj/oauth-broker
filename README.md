@@ -172,14 +172,25 @@ Use HTTPS in production.
 
 This repository includes `.github/workflows/release-deploy.yml`.
 
-Deployment is triggered when a version tag is pushed:
+Deployment can be triggered in two ways.
+
+Option 1: run the workflow manually from GitHub Actions and leave `version` empty. The workflow will read the latest `vMAJOR.MINOR.PATCH` tag and create the next patch version automatically.
+
+Example:
+
+```text
+latest tag: v0.1.3
+next auto version: v0.1.4
+```
+
+Option 2: provide an explicit version in the workflow input, such as `v1.2.3`, or push a tag manually:
 
 ```bash
 git tag v1.2.3
 git push origin v1.2.3
 ```
 
-The workflow builds a Linux arm64 binary and injects the tag into `/version` as the deployed version.
+The workflow builds a Linux arm64 binary and injects the resolved version into `/version` as the deployed version.
 
 Required GitHub Actions secrets:
 

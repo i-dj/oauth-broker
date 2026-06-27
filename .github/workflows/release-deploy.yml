@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to deploy, for example v1.2.3. Defaults to the current ref name.'
+        description: 'Optional version to deploy, for example v1.2.3. Leave empty to auto-increment the latest patch version.'
         required: false
         type: string
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: production-deploy
@@ -30,21 +30,61 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Resolve version
         id: vars
         shell: bash
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          if [ -z "$VERSION" ]; then
+          set -euo pipefail
+
+          INPUT_VERSION="${{ github.event.inputs.version }}"
+          VERSION=""
+          CREATE_TAG="false"
+
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME}"
+          elif [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+            CREATE_TAG="true"
+          else
+            LATEST_TAG="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)"
+            if [ -z "$LATEST_TAG" ]; then
+              VERSION="v0.1.0"
+            else
+              RAW="${LATEST_TAG#v}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$RAW"
+              PATCH=$((PATCH + 1))
+              VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+            fi
+            CREATE_TAG="true"
           fi
-          if [ -z "$VERSION" ]; then
-            VERSION="dev"
+
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must match vMAJOR.MINOR.PATCH, got: $VERSION" >&2
+            exit 1
           fi
+
+          if [ "$CREATE_TAG" = "true" ] && git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists. Choose a different version or leave the input empty." >&2
+            exit 1
+          fi
+
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          echo "create_tag=$CREATE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create release tag
+        if: steps.vars.outputs.create_tag == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.vars.outputs.version }}"
+          git push origin "${{ steps.vars.outputs.version }}"
 
       - name: Setup Go
         uses: actions/setup-go@v5
