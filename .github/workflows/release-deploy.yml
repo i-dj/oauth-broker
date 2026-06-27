@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
             -buildvcs=false \
             -trimpath \
             -ldflags "-s -w -X github.com/i-dj/oauth-broker/internal/buildinfo.Version=${{ steps.vars.outputs.version }} -X github.com/i-dj/oauth-broker/internal/buildinfo.Commit=${{ steps.vars.outputs.commit }} -X github.com/i-dj/oauth-broker/internal/buildinfo.Date=${{ steps.vars.outputs.date }}" \
@@ -71,7 +71,7 @@ jobs:
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: oauth-broker-${{ steps.vars.outputs.version }}-linux-amd64
+          name: oauth-broker-${{ steps.vars.outputs.version }}-linux-arm64
           path: dist/oauth-broker
 
       - name: Upload binary to server

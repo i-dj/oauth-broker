@@ -177,7 +177,7 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
-The workflow builds a Linux binary and injects the tag into `/healthz` as the deployed version.
+The workflow builds a Linux arm64 binary and injects the tag into `/healthz` as the deployed version.
 
 Required GitHub Actions secrets:
 
@@ -195,6 +195,7 @@ Server assumptions used by the workflow:
 | Deploy path | `/opt/oauth-broker` |
 | Binary path | `/opt/oauth-broker/oauth-broker` |
 | systemd service | `oauth-broker` |
+| Target architecture | `linux/arm64` for `aarch64` servers |
 | Local health check | `http://127.0.0.1:8080/healthz` |
 
 ## Device keys
