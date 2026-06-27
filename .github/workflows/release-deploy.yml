@@ -99,4 +99,12 @@ jobs:
             sudo install -m 0755 /tmp/oauth-broker-release/oauth-broker "$DEPLOY_PATH/oauth-broker"
             sudo systemctl restart "$SERVICE_NAME"
             sudo systemctl is-active --quiet "$SERVICE_NAME"
-            curl -fsS http://127.0.0.1:8080/healthz
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:8080/healthz; then
+                exit 0
+              fi
+              sleep 1
+            done
+            sudo systemctl status "$SERVICE_NAME" --no-pager
+            sudo journalctl -u "$SERVICE_NAME" -n 80 --no-pager
+            exit 1
