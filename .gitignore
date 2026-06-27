@@ -1,0 +1,17 @@
+# Secrets
+.env
+.env.*
+!.env.example
+client_secret*.json
+google-client-secret.json
+*client-secret*.json
+
+# Build output
+bin/
+*.exe
+*.test
+*.out
+
+
+logs/
+test-nas-*.pem

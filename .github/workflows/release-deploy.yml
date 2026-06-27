@@ -1,0 +1,102 @@
+name: Release Deploy
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy, for example v1.2.3. Defaults to the current ref name.'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  DEPLOY_PATH: /opt/oauth-broker
+  SERVICE_NAME: oauth-broker
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: vars
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$VERSION" ]; then
+            VERSION="dev"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Test
+        run: go test ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Build Linux binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+            -buildvcs=false \
+            -trimpath \
+            -ldflags "-s -w -X github.com/i-dj/oauth-broker/internal/buildinfo.Version=${{ steps.vars.outputs.version }} -X github.com/i-dj/oauth-broker/internal/buildinfo.Commit=${{ steps.vars.outputs.commit }} -X github.com/i-dj/oauth-broker/internal/buildinfo.Date=${{ steps.vars.outputs.date }}" \
+            -o dist/oauth-broker ./cmd/server
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: oauth-broker-${{ steps.vars.outputs.version }}-linux-amd64
+          path: dist/oauth-broker
+
+      - name: Upload binary to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: dist/oauth-broker
+          target: /tmp/oauth-broker-release
+          strip_components: 1
+
+      - name: Install and restart service
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: DEPLOY_PATH,SERVICE_NAME
+          script: |
+            set -euo pipefail
+            sudo mkdir -p "$DEPLOY_PATH"
+            sudo install -m 0755 /tmp/oauth-broker-release/oauth-broker "$DEPLOY_PATH/oauth-broker"
+            sudo systemctl restart "$SERVICE_NAME"
+            sudo systemctl is-active --quiet "$SERVICE_NAME"
+            curl -fsS http://127.0.0.1:8080/healthz
