@@ -1,4 +1,4 @@
-# OAuth Broker
+﻿# OAuth Broker
 
 OAuth Broker is a lightweight OAuth gateway for NAS clients. It centralizes OAuth authorization for cloud storage providers such as Google Drive, OneDrive, and Dropbox, stores provider tokens in PostgreSQL, and returns rclone-compatible configuration to the NAS.
 
@@ -104,6 +104,58 @@ NAS -> POST /api/oauth/exchange
 rclone -> POST /api/rclone/:provider/token
 ```
 
+
+## Browser popup behavior
+
+For a browser-based NAS UI, open the `authorize_url` in a popup window:
+
+```js
+const popup = window.open(authorizeUrl, "oauth", "width=520,height=720");
+```
+
+After the provider callback completes, the broker callback page sends a completion signal to the opener and then attempts to close itself:
+
+```js
+window.opener.postMessage(payload, "*");
+window.close();
+```
+
+Success payload:
+
+```json
+{
+  "type": "oauth_success",
+  "provider": "google",
+  "success": true,
+  "message": "Authorization succeeded. Return to the NAS; this window may be closed."
+}
+```
+
+Error payload:
+
+```json
+{
+  "type": "oauth_error",
+  "provider": "google",
+  "success": false,
+  "message": "Token exchange failed. Please start the authorization again."
+}
+```
+
+The target origin is `*` because NAS deployments may use private IPs, local hostnames, or custom ports without a stable public origin. The message never contains access tokens, refresh tokens, broker JWTs, or session IDs. Treat it only as a hint to poll session status or continue the existing flow.
+
+Example listener:
+
+```js
+window.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "oauth_success") return;
+
+  // Do not trust the message as authorization data.
+  // Use it only as a signal, then ask the NAS backend to poll status or exchange the session.
+  refreshOAuthStatus();
+});
+```
 ## Build
 
 ```bash

@@ -1,5 +1,5 @@
-﻿<!doctype html>
-<html lang="zh-CN">
+<!doctype html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -10,6 +10,7 @@
     .icon{width:64px;height:64px;border-radius:50%;display:grid;place-items:center;margin:0 auto 22px;color:#fff;background:{{.Color}};font-size:34px;font-weight:700}
     h1{margin:0 0 12px;font-size:28px}
     p{margin:0;color:#657086;line-height:1.7}
+    .hint{margin-top:14px;font-size:13px;color:#8a94a6}
   </style>
 </head>
 <body>
@@ -17,6 +18,29 @@
     <div class="icon">{{.Icon}}</div>
     <h1>{{.Title}}</h1>
     <p>{{.Message}}</p>
+    <p class="hint">This window should close automatically.</p>
   </main>
+  <script>
+    (function () {
+      var payload = {
+        type: "{{.EventType}}",
+        provider: "{{.Provider}}",
+        success: {{.Success}},
+        message: "{{.Message}}"
+      };
+
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage(payload, "*");
+        }
+      } catch (error) {
+        // The broker never sends tokens through postMessage; this is only a completion signal.
+      }
+
+      window.setTimeout(function () {
+        window.close();
+      }, 300);
+    })();
+  </script>
 </body>
 </html>

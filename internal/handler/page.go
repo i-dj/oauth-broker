@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"html/template"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	webassets "github.com/i-dj/oauth-broker/web"
@@ -12,21 +13,29 @@ import (
 var oauthResultTemplate = template.Must(template.ParseFS(webassets.Templates, "templates/oauth_result.html"))
 
 type oauthResultView struct {
-	Title   string
-	Message string
-	Icon    string
-	Color   string
+	Success   bool
+	EventType string
+	Provider  string
+	Title     string
+	Message   string
+	Icon      string
+	Color     string
 }
 
 func writeCallbackPage(c *gin.Context, success bool, message string) {
+	provider := strings.TrimSpace(c.Param("provider"))
 	view := oauthResultView{
-		Title:   "授权失败",
-		Message: message,
-		Icon:    "!",
-		Color:   "#dc2626",
+		Success:   success,
+		EventType: "oauth_error",
+		Provider:  provider,
+		Title:     "Authorization failed",
+		Message:   message,
+		Icon:      "!",
+		Color:     "#dc2626",
 	}
 	if success {
-		view.Title = "授权成功"
+		view.EventType = "oauth_success"
+		view.Title = "Authorization completed"
 		view.Icon = "✓"
 		view.Color = "#16a34a"
 	}
